@@ -1,0 +1,7 @@
+# Single 3.94 MB app, no OTA and no SPIFFS: the 2.06 MB dictionary does not fit
+# in the ~1.31 MB the default Arduino table leaves for the application.
+# 0x10000 + 0x3F0000 = 0x400000, exactly the 4 MB part.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+phy_init, data, phy,     0xe000,  0x1000,
+factory,  app,  factory, 0x10000, 0x3F0000,
