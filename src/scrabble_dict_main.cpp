@@ -262,6 +262,44 @@ static uint16_t band_drawn = 0xFFFE;   // impossible RGB565, forces a first pain
 static bool screen_on = true;
 static unsigned long last_key_ms = 0;
 
+static uint32_t pick_random_sibling(uint32_t node_idx) {
+    uint32_t chosen = node_idx;
+    uint32_t seen = 0;
+
+    while (node_idx < WORD_RADIX_TRIE_DATA_COUNT) {
+        seen++;
+        if (random((long)seen) == 0) chosen = node_idx;
+
+        uint32_t header = WORD_RADIX_TRIE_DATA[node_idx];
+        if (header & RADIX_FLAG_LAST_SIBLING) break;
+        node_idx = radix_next_sibling(node_idx, header);
+    }
+    return chosen;
+}
+
+static uint8_t random_startup_word(uint8_t *out, uint8_t out_max) {
+    if (!out || out_max == 0 || WORD_RADIX_TRIE_DATA_COUNT == 0) return 0;
+
+    uint32_t node_idx = pick_random_sibling(0);
+    uint8_t n = 0;
+
+    while (node_idx < WORD_RADIX_TRIE_DATA_COUNT) {
+        uint32_t header = WORD_RADIX_TRIE_DATA[node_idx];
+        uint32_t label_len = header & RADIX_LEN_MASK;
+
+        for (uint32_t k = 0; k < label_len; k++) {
+            if (n >= out_max) return n;
+            out[n++] = (uint8_t)radix_label_char(WORD_RADIX_LABEL_POOL, header, k);
+        }
+
+        if ((header & RADIX_FLAG_END_OF_WORD) && random(2) == 0) return n;
+        if (!(header & RADIX_FLAG_HAS_CHILD)) return n;
+
+        node_idx = pick_random_sibling(WORD_RADIX_TRIE_DATA[node_idx + 1]);
+    }
+    return n;
+}
+
 // -------------------------------------------------------------------- render
 
 // Precise rectangle fill. DispColor always pushes a full screen's worth of
@@ -384,12 +422,17 @@ static void render_status() {
 // ---------------------------------------------------------------- word edits
 
 static void recompute() {
-    verdict = scrabble_judge(word_codes, word_len);
+    if (word_len == 0) {
+        verdict = WORD_EMPTY;
+        suggest_len = random_startup_word(word_suggest, TEXT_COLS);
+    } else {
+        verdict = scrabble_judge(word_codes, word_len);
 
-    // Only as many suggestion letters as there are free cells left on the row;
-    // scrabble_complete reports none rather than a truncated word.
-    uint8_t room = (word_len < TEXT_COLS) ? (uint8_t)(TEXT_COLS - word_len) : 0;
-    suggest_len = scrabble_complete(word_codes, word_len, word_suggest, room);
+        // Only as many suggestion letters as there are free cells left on the row;
+        // scrabble_complete reports none rather than a truncated word.
+        uint8_t room = (word_len < TEXT_COLS) ? (uint8_t)(TEXT_COLS - word_len) : 0;
+        suggest_len = scrabble_complete(word_codes, word_len, word_suggest, room);
+    }
 
     char tail[SCRABBLE_MAX_WORD_LEN * 4 + 1];
     codes_to_utf8(word_suggest, suggest_len, tail, sizeof tail);
@@ -399,7 +442,7 @@ static void recompute() {
                   verdict == WORD_EMPTY ? "EMPTY" : verdict_label(verdict),
                   (unsigned)word_len,
                   (unsigned)scrabble_score(word_codes, word_len),
-                  suggest_len ? query : "",
+                  suggest_len ? (word_len ? query : "") : "",
                   suggest_len ? tail : "-");
 }
 
@@ -455,12 +498,14 @@ void scrabble_dict_main::begin() {
 
     screen_on = true;
     last_key_ms = millis();
+    randomSeed((uint32_t)micros());
 
     status_drawn[0] = '\0';
     for (uint8_t i = 0; i < TEXT_COLS; i++) {
         drawn_code[i] = CELL_EMPTY;
         drawn_ghost[i] = false;
     }
+    recompute();
     render_word();
     render_status();
     Serial.println("Ready");
