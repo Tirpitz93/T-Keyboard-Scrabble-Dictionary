@@ -1,0 +1,84 @@
+name: Build and Release Firmware
+
+on:
+  pull_request:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio esptool
+
+      - name: Build firmware
+        run: pio run -e T-Keyboard-scrabble
+
+      - name: Prepare release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_DIR=".pio/build/T-Keyboard-scrabble"
+          DIST_DIR="dist"
+          mkdir -p "$DIST_DIR"
+
+          cp "$BUILD_DIR/firmware.bin" "$DIST_DIR/firmware.bin"
+          cp "$BUILD_DIR/bootloader.bin" "$DIST_DIR/bootloader.bin"
+          cp "$BUILD_DIR/partitions.bin" "$DIST_DIR/partitions.bin"
+
+          BOOT_APP0="$BUILD_DIR/boot_app0.bin"
+          if [[ ! -f "$BOOT_APP0" ]]; then
+            BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/framework-arduinoespressif32/tools/partitions/boot_app0.bin' | head -n 1 || true)"
+          fi
+
+          MERGE_ARGS=(
+            0x1000 "$BUILD_DIR/bootloader.bin"
+            0x8000 "$BUILD_DIR/partitions.bin"
+          )
+
+          if [[ -n "$BOOT_APP0" && -f "$BOOT_APP0" ]]; then
+            cp "$BOOT_APP0" "$DIST_DIR/boot_app0.bin"
+            MERGE_ARGS+=(0xe000 "$BOOT_APP0")
+          fi
+
+          MERGE_ARGS+=(0x10000 "$BUILD_DIR/firmware.bin")
+
+          python -m esptool --chip esp32 merge_bin -o "$DIST_DIR/firmware-merged.bin" "${MERGE_ARGS[@]}"
+
+          sha256sum "$DIST_DIR"/*.bin > "$DIST_DIR/SHA256SUMS.txt"
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            dist/*.bin
+            dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Firmware ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.bin
+            dist/SHA256SUMS.txt
