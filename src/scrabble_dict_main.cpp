@@ -8,10 +8,8 @@
 #include "scrabble_dict_main.h"
 
 #include <Arduino.h>
-#include <SPI.h>
 #include <stdio.h>
 
-#include <TFT_GC9D01N.h>
 
 #include "word_radix_trie.h"
 #include "radix_trie_complete.h"
@@ -44,8 +42,11 @@
 // 40-axis offset of the umlaut dots inside the word row's 0..15 cell. 0 puts
 // them at the low edge; if they come out under the glyph instead of over it on
 // real hardware, this is the one constant to change (14 is the other edge).
-#define UMLAUT_DOT_A0 0
-#define UMLAUT_DOT_SIZE 2
+
+#define LANDSCAPE 1   //Horizontal screen
+//#define PORTRAIT 2
+#define CHAR_FONT_W8_H16  //typeface
+
 #define TFT_HIGH  40
 #define TFT_WIDE 160
 #define GAP 8
@@ -54,50 +55,12 @@
 #define TFT_MOSI 10
 #define TFT_SCLK 20
 #define TFT_CS -1
-#define TFT_MISO -1
+#define TFT_MISO 2
+#define TFT_RST -1
 #define KB_BACKLIGHT_PIN  9
-#define CORE_DEBUG_LEVEL 5
-#define LANDSCAPE 1   //Horizontal screen
-//#define PORTRAIT 2
-#define CHAR_FONT_W8_H16  //typeface
-
-#define TFT_WIDTH  40
-#define TFT_HEIGHT 160
-
-#define TFT_MISO  -1
-#define TFT_MOSI  10//21
-#define TFT_SCLK  20//22
-#define TFT_CS    -1//18  // Chip select control pin
-#define TFT_DC    2  // Data Command control pin
-#define TFT_RST   -1//27
-#define TFT_BL    8//4
-
-/*
-#define TFT_MISO  -1
-#define TFT_MOSI  21
-#define TFT_SCLK  22
-#define TFT_CS    18  // Chip select control pin
-#define TFT_DC    2  // Data Command control pin
-#define TFT_RST   27
-#define TFT_BL    23//4
-*/
-//RGB565
-#define RED    0xF800
-#define GREEN  0x07E0
-#define BLUE   0x001F
-#define WHITE  0xFFFF
-#define BLACK  0x0000
-#define GRAY   0xEF5D
-#define GRAY75 0x39E7
-#define GRAY50 0x7BEF
-#define GRAY25 0xADB5
-
-
-
-#ifdef  CHAR_FONT_W8_H16
-#define  FONT_W  8
-#define  FONT_H  16
-#endif
+#define CORE_DEBUG_LEVEL 0
+#define CORE_DEBUG_LEVEL_NONE
+// #define CONFIG_BOOTLOADER_LOG_LEVEL_NONE
 
 
 #define SPI_FREQUENCY  40000000
@@ -118,6 +81,9 @@
 #define RST_L digitalWrite(TFT_RST, LOW)
 #define RST_H digitalWrite(TFT_RST, HIGH)
 #endif
+
+
+#include <TFT_GC9D01N.h>
 static TFT_GC9D01N_Class TFT_099;
 
 // ---------------------------------------------------------------- dictionary
@@ -125,9 +91,9 @@ static TFT_GC9D01N_Class TFT_099;
 // Standard English tile values, indexed by alphabet code. The 27th letter (O
 // with diaeresis) has no real tile; it takes O's value of 1.
 static const uint8_t TILE_VALUE[RADIX_ALPHABET_SIZE] = {
-    1,  3,  3,  2,  1,  4,  2,  4,  1,  8,  // A B C D E F G H I J
-    5,  1,  3,  1,  1,  3, 10,  1,  1,  1,  // K L M N O P Q R S T
-    1,  4,  4,  8,  4, 10,                  // U V W X Y Z
+    1, 3, 3, 2, 1, 4, 2, 4, 1, 8, // A B C D E F G H I J
+    5, 1, 3, 1, 1, 3, 10, 1, 1, 1, // K L M N O P Q R S T
+    1, 4, 4, 8, 4, 10, // U V W X Y Z
     // 1,                                      // O-diaeresis
 };
 
@@ -185,11 +151,11 @@ static const int rowCount = sizeof(rows) / sizeof(rows[0]);
 static const int colCount = sizeof(cols) / sizeof(cols[0]);
 
 static const char keyboard[5][7] = {
-    /* col 0 */ {'q', 'w',   0, 'a',   0, ' ',   0},  // (0,2) symbol, (0,4) alt, (0,5) space, (0,6) mic
-    /* col 1 */ {'e', 's', 'd', 'p', 'x', 'z',   0},  // (1,6) left shift
-    /* col 2 */ {'r', 'g', 't',   0, 'v', 'c', 'f'},  // (2,3) right shift
-    /* col 3 */ {'u', 'h', 'y',   0, 'b', 'n', 'j'},  // (3,3) enter
-    /* col 4 */ {'o', 'l', 'i',   0, '$', 'm', 'k'},  // (4,3) backspace
+    /* col 0 */ {'q', 'w', 0, 'a', 0, ' ', 0}, // (0,2) symbol, (0,4) alt, (0,5) space, (0,6) mic
+    /* col 1 */ {'e', 's', 'd', 'p', 'x', 'z', 0}, // (1,6) left shift
+    /* col 2 */ {'r', 'g', 't', 0, 'v', 'c', 'f'}, // (2,3) right shift
+    /* col 3 */ {'u', 'h', 'y', 0, 'b', 'n', 'j'}, // (3,3) enter
+    /* col 4 */ {'o', 'l', 'i', 0, '$', 'm', 'k'}, // (4,3) backspace
 };
 
 #define KEY_SYMBOL_C    0
@@ -257,7 +223,7 @@ static bool kb_backlight_on = true;
 
 static char status_line[TEXT_COLS + 1];
 static char status_drawn[TEXT_COLS + 1];
-static uint16_t band_drawn = 0xFFFE;   // impossible RGB565, forces a first paint
+static uint16_t band_drawn = 0xFFFE; // impossible RGB565, forces a first paint
 
 static bool screen_on = true;
 static unsigned long last_key_ms = 0;
@@ -268,7 +234,7 @@ static uint32_t pick_random_sibling(uint32_t node_idx) {
 
     while (node_idx < WORD_RADIX_TRIE_DATA_COUNT) {
         seen++;
-        if (random((long)seen) == 0) chosen = node_idx;
+        if (random((long) seen) == 0) chosen = node_idx;
 
         uint32_t header = WORD_RADIX_TRIE_DATA[node_idx];
         if (header & RADIX_FLAG_LAST_SIBLING) break;
@@ -289,7 +255,7 @@ static uint8_t random_startup_word(uint8_t *out, uint8_t out_max) {
 
         for (uint32_t k = 0; k < label_len; k++) {
             if (n >= out_max) return n;
-            out[n++] = (uint8_t)radix_label_char(WORD_RADIX_LABEL_POOL, header, k);
+            out[n++] = (uint8_t) radix_label_char(WORD_RADIX_LABEL_POOL, header, k);
         }
 
         if ((header & RADIX_FLAG_END_OF_WORD) && random(2) == 0) return n;
@@ -309,7 +275,7 @@ static uint8_t random_startup_word(uint8_t *out, uint8_t out_max) {
 static void fill_rect(unsigned int a0, unsigned int a1,
                       unsigned int b0, unsigned int b1, uint16_t color) {
     TFT_099.BlockWrite(a0, a1, b0, b1);
-    unsigned long n = (unsigned long)(a1 - a0 + 1) * (b1 - b0 + 1);
+    unsigned long n = (unsigned long) (a1 - a0 + 1) * (b1 - b0 + 1);
     while (n--) TFT_099.WriteOneDot(color);
 }
 
@@ -325,16 +291,9 @@ static void draw_letter_cell(uint8_t col, uint8_t code, uint16_t fg) {
     if (code >= RADIX_ALPHABET_SIZE) return;
 
     const char *glyph = RADIX_ALPHABET_TABLE[code];
-    bool umlaut = (glyph[1] != '\0');   // the only multi-byte entry is O-diaeresis
+    bool umlaut = (glyph[1] != '\0'); // the only multi-byte entry is O-diaeresis
     char c = umlaut ? 'O' : glyph[0];
     draw_glyph(c, col, ROW_WORD_Y, fg, BLACK);
-
-    if (umlaut) {
-        unsigned int x = col * FONT_W;
-        unsigned int a1 = UMLAUT_DOT_A0 + UMLAUT_DOT_SIZE - 1;
-        fill_rect(UMLAUT_DOT_A0, a1, x + 2, x + 2 + UMLAUT_DOT_SIZE - 1, fg);
-        fill_rect(UMLAUT_DOT_A0, a1, x + 5, x + 5 + UMLAUT_DOT_SIZE - 1, fg);
-    }
 }
 
 static void clear_cell(uint8_t col) {
@@ -373,19 +332,19 @@ static void render_word() {
 
 static const char *verdict_label(word_verdict_t v) {
     switch (v) {
-        case WORD_VALID:    return "VALID";
-        case WORD_PREFIX:   return "NOT WORD";
+        case WORD_VALID: return "VALID";
+        case WORD_PREFIX: return "NOT WORD";
         case WORD_DEAD_END: return "DEAD END";
-        default:            return "";
+        default: return "";
     }
 }
 
 static uint16_t verdict_color(word_verdict_t v) {
     switch (v) {
-        case WORD_VALID:    return GREEN;
-        case WORD_PREFIX:   return GRAY50;
+        case WORD_VALID: return GREEN;
+        case WORD_PREFIX: return GRAY50;
         case WORD_DEAD_END: return RED;
-        default:            return BLACK;
+        default: return BLACK;
     }
 }
 
@@ -396,11 +355,11 @@ static void render_status() {
         snprintf(status_line, sizeof status_line, "%s", "Type a word");
     } else if (verdict == WORD_DEAD_END) {
         snprintf(status_line, sizeof status_line, "%-8s %2dL",
-                 verdict_label(verdict), (int)word_len);
+                 verdict_label(verdict), (int) word_len);
     } else {
         snprintf(status_line, sizeof status_line, "%-8s %2dL %3dP",
-                 verdict_label(verdict), (int)word_len,
-                 (int)scrabble_score(word_codes, word_len));
+                 verdict_label(verdict), (int) word_len,
+                 (int) scrabble_score(word_codes, word_len));
     }
 
     size_t n = strlen(status_line);
@@ -430,20 +389,20 @@ static void recompute() {
 
         // Only as many suggestion letters as there are free cells left on the row;
         // scrabble_complete reports none rather than a truncated word.
-        uint8_t room = (word_len < TEXT_COLS) ? (uint8_t)(TEXT_COLS - word_len) : 0;
+        uint8_t room = (word_len < TEXT_COLS) ? (uint8_t) (TEXT_COLS - word_len) : 0;
         suggest_len = scrabble_complete(word_codes, word_len, word_suggest, room);
     }
 
     char tail[SCRABBLE_MAX_WORD_LEN * 4 + 1];
     codes_to_utf8(word_suggest, suggest_len, tail, sizeof tail);
 
-    Serial.printf("%-16s %-8s %2uL %3uP  -> %s%s\n",
-                  word_len ? query : "(empty)",
-                  verdict == WORD_EMPTY ? "EMPTY" : verdict_label(verdict),
-                  (unsigned)word_len,
-                  (unsigned)scrabble_score(word_codes, word_len),
-                  suggest_len ? (word_len ? query : "") : "",
-                  suggest_len ? tail : "-");
+     Serial.printf("%-16s %-8s %2uL %3uP  -> %s%s\n",
+     word_len ? query : "(empty)",
+     verdict == WORD_EMPTY ? "EMPTY" : verdict_label(verdict),
+     (unsigned) word_len,
+     (unsigned) scrabble_score(word_codes, word_len),
+     suggest_len ? (word_len ? query : "") : "",
+     suggest_len ? tail : "-");
 }
 
 static void append_code(uint8_t code) {
@@ -470,45 +429,55 @@ static void set_kb_backlight(bool state) {
 // --------------------------------------------------------------------- entry
 
 void scrabble_dict_main::begin() {
-    Serial.begin(115200);
-    delay(200);
-    Serial.println("Scrabble word judge starting");
-    Serial.printf("dictionary: %u nodes, %u bytes\n",
-                  (unsigned)WORD_RADIX_TRIE_DATA_COUNT,
-                  (unsigned)WORD_RADIX_TRIE_DATA_SIZE_BYTES);
-
-    pinMode(KB_BACKLIGHT_PIN, OUTPUT);
-    set_kb_backlight(kb_backlight_on);
-    // delay(50);
     for (int r = 0; r < rowCount; r++) pinMode(rows[r], INPUT);
     for (int c = 0; c < colCount; c++) pinMode(cols[c], INPUT_PULLUP);
+    Serial.begin(115200);
+    delay(200);
+    Serial.printf("It has taken %d ms to get here\n", millis());
+    Serial.println("Scrabble word judge starting");
+    Serial.printf("dictionary: %u nodes, %u bytes\n",
+                  (unsigned) WORD_RADIX_TRIE_DATA_COUNT,
+                  (unsigned) WORD_RADIX_TRIE_DATA_SIZE_BYTES);
 
+    pinMode(KB_BACKLIGHT_PIN, OUTPUT);
+    // set_kb_backlight(kb_backlight_on);
+    // delay(50);
+    SPI.end(); //didnt make a difference still powering up black but a quick power down and up would work, reset doesnt work.
+
+
+    // Serial.flush();
     memset(key_held, 0, sizeof key_held);
     memset(key_prev, 0, sizeof key_prev);
     memset(key_edge, 0, sizeof key_edge);
     scan_matrix();
     memset(key_edge, 0, sizeof key_edge);
-
+    Serial.printf("About to start TFT_099\n");
+    Serial.printf("TFT_099 pins: SCLK=%d, MISO=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BL=%d\n",
+    TFT_SCLK, TFT_MISO, TFT_MOSI, TFT_CS, TFT_DC, TFT_RST, TFT_BL_PIN);
+    Serial.printf("It has taken %d ms to get here\n", millis());
+    // delay(500);
     TFT_099.begin();
-
-    TFT_099.backlight(SCREEN_BACKLIGHT);
-
+    // delay(500);
+    // Serial.printf("It has taken %d ms to get here\n", millis());
     TFT_099.DispColor(0, 0, TFT_WIDTH, TFT_HEIGHT, BLACK);
+    TFT_099.backlight(SCREEN_BACKLIGHT);
+    // Serial.printf("It has taken %d ms to get here\n", millis());
 
 
     screen_on = true;
     last_key_ms = millis();
-    randomSeed((uint32_t)micros());
+    // randomSeed((uint32_t)micros());
 
     status_drawn[0] = '\0';
     for (uint8_t i = 0; i < TEXT_COLS; i++) {
         drawn_code[i] = CELL_EMPTY;
         drawn_ghost[i] = false;
     }
-    recompute();
-    render_word();
-    render_status();
+    Serial.printf("It has taken %d ms to get here\n", millis());
     Serial.println("Ready");
+    Serial.flush();
+    recompute();
+    set_kb_backlight(kb_backlight_on); //try moving to end of init to reduce load at startup.
 }
 
 void scrabble_dict_main::loop() {
@@ -517,7 +486,10 @@ void scrabble_dict_main::loop() {
     bool any_key = false;
     for (int c = 0; c < colCount && !any_key; c++) {
         for (int r = 0; r < rowCount; r++) {
-            if (key_edge[c][r]) { any_key = true; break; }
+            if (key_edge[c][r]) {
+                any_key = true;
+                break;
+            }
         }
     }
 
@@ -543,8 +515,9 @@ void scrabble_dict_main::loop() {
 
     if (key_pressed(KEY_BACKSPACE_C, KEY_BACKSPACE_R)) backspace();
 
-    if (key_pressed(KEY_ENTER_C, KEY_ENTER_R) ||
-        key_pressed(KEY_SPACE_C, KEY_SPACE_R)) {
+    if (key_pressed(KEY_ENTER_C, KEY_ENTER_R)
+        // || key_pressed(KEY_SPACE_C, KEY_SPACE_R)
+    ){
         clear_word();
     }
 
@@ -554,7 +527,7 @@ void scrabble_dict_main::loop() {
                 if (!key_edge[c][r]) continue;
 
                 char k = keyboard[c][r];
-                if (k < 'a' || k > 'z') continue;   // skips 0, ' ' and '$'
+                if (k < 'a' || k > 'z') continue; // skips 0, ' ' and '$'
 
                 if (symbol_latched) {
                     symbol_latched = false;
@@ -564,7 +537,7 @@ void scrabble_dict_main::loop() {
                         continue;
                     }
                 }
-                append_code((uint8_t)(k - 'a'));
+                append_code((uint8_t) (k - 'a'));
             }
         }
     }

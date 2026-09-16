@@ -1,0 +1,3 @@
+[submodule "lib/dictionaries"]
+	path = lib/dictionaries
+	url = https://github.com/kamilmielnik/scrabble-dictionaries

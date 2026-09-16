@@ -3,30 +3,41 @@
 A standalone firmware for the LilyGO T-Keyboard that turns the device into a Scrabble word judge.
 
 It evaluates typed words against a compressed Collins Scrabble Words (2019) dictionary stored on-device, and shows:
-- whether the current input is a valid word
-- whether it is still a valid prefix
-- tile score and letter count
-- a ghost-text completion for the first lexicographic matching word
+- [x]  Whether the current input is a valid word
+- [x]  Whether it is still a valid prefix
+- [x]  Tile score and letter count
+- [x]  A ghost-text completion for the first lexicographic matching word
+- [ ]  Show valid character combinations (not yet implemented)
+- [ ]  Symbols and special characters (not yet implemented)
+- [ ]  Support for multiple dictionaries (not yet implemented)
+
+## Controls
+-  Use the keyboard to type letters
+- `ENTER` clears the current word, 
+- `BACKSPACE` deletes one letter, and 
+- `ALT+B` toggles the keyboard backlight. 
+- `SPACE` wakes the screen again but does not clear the current word.
+
+
 
 ## Hardware target
 
-- Board: `ttgo-t-oi-plus`
+- Board: LilyGO T-Keyboard Platform IO target: `ttgo-t-oi-plus`
 - Framework: Arduino (PlatformIO)
 - Platform: `espressif32 @ 6.1`
 
-See `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/platformio.ini` for the exact environment configuration.
+See `platformio.ini` for the exact environment configuration.
 
 ## Repository layout
 
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/src/scrabble_dict_main.cpp` – firmware entry and runtime logic
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/src/scrabble_dict_main.h` – public firmware API and verdict types
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/src/word_radix_trie.h` – generated radix trie metadata and lookup helpers
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/src/word_radix_trie_data.h` – generated packed dictionary payload (large file)
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/src/radix_trie_complete.h` – completion lookup logic
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/compile_word_trie.py` – dictionary compiler/generator script
-- `/home/runner/work/T-Keyboard-Scrabble-Dictionary/T-Keyboard-Scrabble-Dictionary/partitions_scrabble.csv` – custom partition table to fit dictionary size
+- `src/scrabble_dict_main.cpp` – firmware entry and runtime logic
+- `src/scrabble_dict_main.h` – public firmware API and verdict types
+- `src/word_radix_trie.h` – generated radix trie metadata and lookup helpers
+- `src/word_radix_trie_data.h` – generated packed dictionary payload (large file)
+- `src/radix_trie_complete.h` – completion lookup logic
+- `compile_word_trie.py` – dictionary compiler/generator script
+- `partitions_scrabble.csv` – custom partition table to fit dictionary size
 
-## Local development
 
 ### Prerequisites
 
@@ -63,16 +74,8 @@ The trie data is generated from a word list by:
 ```bash
 python compile_word_trie.py
 ```
-
+TODO: Add a `--wordlist` option to specify a custom word list file. and an interactive choice to compile a trie from a custom word list.
 The script emits generated headers used by the firmware. Keep generated trie files in sync with the word list whenever dictionary content changes.
-
-## Device behavior / controls
-
-- Type letters on the T-Keyboard matrix
-- `Backspace` deletes one letter
-- `Enter` or `Space` clears the current word
-- `Alt + B` toggles keyboard backlight
-- `Symbol` then `O` is reserved for the dictionary's extra letter slot when present in the generated alphabet
 
 ## CI/CD: build and release firmware
 
