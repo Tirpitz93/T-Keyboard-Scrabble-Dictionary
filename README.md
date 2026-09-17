@@ -1,7 +1,10 @@
 # T-Keyboard Scrabble Dictionary Firmware
 
 A standalone firmware for the LilyGO T-Keyboard that turns the device into a Scrabble word judge.
-[![Quick Demo](https://img.youtube.com/vi/ZCGrr6VZcCE/0.jpg)](https://youtu.be/ZCGrr6VZcCE?si=6sznrlx1wRNlPA5e" Quick demo")
+
+
+Demo video (Youtube)
+[![Quick Demo](https://img.youtube.com/vi/ZCGrr6VZcCE/0.jpg)]( https://youtu.be/ZCGrr6VZcCE?si=6sznrlx1wRNlPA5e "Quick demo")
 
 
 It evaluates typed words against a compressed Collins Scrabble Words (2019) dictionary stored on-device, and shows:
